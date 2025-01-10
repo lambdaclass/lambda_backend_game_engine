@@ -425,6 +425,31 @@ defmodule GameBackend.Configuration do
     |> Repo.insert()
   end
 
+  def copy_version(attrs \\ %{}) do
+      Multi.new()
+      |> Multi.insert(:version,
+        %Version{}
+        |> Version.changeset(attrs)
+      )
+      |> Multi.run(:link_character_skills, fn repo, changes ->
+        characters = changes.version.characters
+        skills = changes.version.skills
+
+        characters
+        |> Enum.each(fn character ->
+          character
+          |> Character.changeset(%{})
+          |> Ecto.Changeset.put_change(:basic_skill_id, Enum.find(skills, fn skill -> skill.name == character.basic_skill.name end).id)
+          |> Ecto.Changeset.put_change(:dash_skill_id, Enum.find(skills, fn skill -> skill.name == character.dash_skill.name end).id)
+          |> Ecto.Changeset.put_change(:ultimate_skill_id, Enum.find(skills, fn skill -> skill.name == character.ultimate_skill.name end).id)
+          |> repo.update!()
+        end)
+
+        {:ok, :ok}
+      end)
+      |> Repo.transaction()
+  end
+
   @doc """
   Updates a arena_server.
 

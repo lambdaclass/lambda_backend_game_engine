@@ -22,8 +22,18 @@ defmodule ConfiguratorWeb.VersionController do
       |> Map.put(:map_configurations, schema_to_map(last_version.map_configurations))
       |> Map.put(:skills, schema_to_map(last_version.skills))
 
-    changeset = Configuration.change_version(%Version{}, params)
-    render(conn, :new, changeset: changeset, last_version: last_version, skills: skills)
+    case Configuration.copy_version(params |> Map.put(:name, params.name <> "_copy") |> Map.put(:current, false)) do
+      {:ok, %{version: version}} ->
+        conn
+        |> put_flash(:info, "Version created successfully.")
+        |> redirect(to: ~p"/versions/#{version}")
+
+      {:error, :version, %Ecto.Changeset{} = changeset, _changes_so_far} ->
+        last_version = GameBackend.Configuration.get_current_version()
+        skills = Utils.list_curse_skills_by_version_grouped_by_type(last_version.id)
+
+        render(conn, :new, changeset: changeset, last_version: last_version, skills: skills)
+    end
   end
 
   # TODO: We have a cycle in our Skill.Mechanic assocs so this is to end that loop.
@@ -42,6 +52,9 @@ defmodule ConfiguratorWeb.VersionController do
 
   def schema_to_map(%_struct{} = schema) do
     schema
+    |> Map.reject(fn {k, _v} ->
+      k in [:on_arrival_mechanic_id, :parent_mechanic_id, :version_id, :dash_skill_id, :ultimate_skill_id, :basic_skill_id]
+    end)
     |> Map.from_struct()
     |> Enum.map(fn {key, value} -> {key, schema_to_map(value)} end)
     |> Enum.into(%{})
