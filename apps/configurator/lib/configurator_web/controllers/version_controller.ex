@@ -1,38 +1,47 @@
 defmodule ConfiguratorWeb.VersionController do
   use ConfiguratorWeb, :controller
 
+  require Logger
   alias GameBackend.Configuration
-  alias GameBackend.Configuration.Version
-  alias Configurator.Utils
 
   def index(conn, _params) do
     versions = Configuration.list_versions()
     render(conn, :index, versions: versions)
   end
 
-  def new(conn, _params) do
-    last_version = GameBackend.Configuration.get_current_version()
-    skills = Utils.list_curse_skills_by_version_grouped_by_type(last_version.id)
+  def copy(conn, _params) do
+    versions = Configuration.list_versions()
+    render(conn, :copy, versions: versions)
+  end
+
+  def create_copy(conn, params) do
+    selected_version = Configuration.get_preloaded_version!(params["version_id"])
 
     params =
-      Map.from_struct(last_version)
-      |> Map.put(:characters, schema_to_map(last_version.characters))
-      |> Map.put(:consumable_items, schema_to_map(last_version.consumable_items))
-      |> Map.put(:game_configuration, schema_to_map(last_version.game_configuration))
-      |> Map.put(:map_configurations, schema_to_map(last_version.map_configurations))
-      |> Map.put(:skills, schema_to_map(last_version.skills))
+      Map.from_struct(selected_version)
+      |> Map.put(:characters, schema_to_map(selected_version.characters))
+      |> Map.put(:consumable_items, schema_to_map(selected_version.consumable_items))
+      |> Map.put(:game_configuration, schema_to_map(selected_version.game_configuration))
+      |> Map.put(:map_configurations, schema_to_map(selected_version.map_configurations))
+      |> Map.put(:skills, schema_to_map(selected_version.skills))
+      |> Map.put(:name, params["name"])
+      |> Map.put(:current, false)
 
-    case Configuration.copy_version(params |> Map.put(:name, params.name <> "_copy") |> Map.put(:current, false)) do
+    case Configuration.copy_version(params) do
       {:ok, %{version: version}} ->
         conn
         |> put_flash(:info, "Version created successfully.")
         |> redirect(to: ~p"/versions/#{version}")
 
       {:error, :version, %Ecto.Changeset{} = changeset, _changes_so_far} ->
-        last_version = GameBackend.Configuration.get_current_version()
-        skills = Utils.list_curse_skills_by_version_grouped_by_type(last_version.id)
+        Logger.info("Insertion failed. Changeset: #{changeset}")
+        versions = Configuration.list_versions()
+        render(conn, :index, versions: versions)
 
-        render(conn, :new, changeset: changeset, last_version: last_version, skills: skills)
+      {:error, :link_character_skills, %Ecto.Changeset{} = changeset, _changes_so_far} ->
+        Logger.info("Link character skills failed. Changeset: #{changeset}")
+        versions = Configuration.list_versions()
+        render(conn, :index, versions: versions)
     end
   end
 
@@ -53,7 +62,14 @@ defmodule ConfiguratorWeb.VersionController do
   def schema_to_map(%_struct{} = schema) do
     schema
     |> Map.reject(fn {k, _v} ->
-      k in [:on_arrival_mechanic_id, :parent_mechanic_id, :version_id, :dash_skill_id, :ultimate_skill_id, :basic_skill_id]
+      k in [
+        :on_arrival_mechanic_id,
+        :parent_mechanic_id,
+        :version_id,
+        :dash_skill_id,
+        :ultimate_skill_id,
+        :basic_skill_id
+      ]
     end)
     |> Map.from_struct()
     |> Enum.map(fn {key, value} -> {key, schema_to_map(value)} end)
@@ -71,36 +87,6 @@ defmodule ConfiguratorWeb.VersionController do
   end
 
   def schema_to_map(value), do: value
-
-  def create(conn, %{"version" => version_params}) do
-    version_params =
-      case Map.get(version_params, "map_configurations") do
-        nil ->
-          version_params
-
-        map_configurations ->
-          Map.put(
-            version_params,
-            "map_configurations",
-            Map.new(map_configurations, fn {key, map_params} ->
-              {key, Utils.parse_json_params(map_params)}
-            end)
-          )
-      end
-
-    case Configuration.create_version(version_params) do
-      {:ok, version} ->
-        conn
-        |> put_flash(:info, "Version created successfully.")
-        |> redirect(to: ~p"/versions/#{version}")
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        last_version = GameBackend.Configuration.get_current_version()
-        skills = Utils.list_curse_skills_by_version_grouped_by_type(last_version.id)
-
-        render(conn, :new, changeset: changeset, last_version: last_version, skills: skills)
-    end
-  end
 
   def show(conn, %{"id" => id}) do
     version = Configuration.get_version!(id)
