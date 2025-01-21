@@ -57,7 +57,9 @@ defmodule ConfiguratorWeb.Router do
 
     scope "/versions" do
       get "/show_current_version", VersionController, :show_current_version
-      resources "/", VersionController
+      get "/copy", VersionController, :copy
+      post "/create_copy", VersionController, :create_copy
+      resources "/", VersionController, except: [:new]
       put "/:id/current", VersionController, :mark_as_current
 
       scope "/:version_id" do
