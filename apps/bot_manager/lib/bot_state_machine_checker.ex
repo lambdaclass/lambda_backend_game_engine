@@ -2,9 +2,10 @@ defmodule BotManager.BotStateMachineChecker do
   @moduledoc """
   This module will take care of deciding what the bot will do on each deciding step
   """
+  alias BotManager.Utils
   @low_health_percentage 40
   defstruct [
-    # The bot state, these are the possible states: [:idling, :moving, :attacking, :running_away]
+    # The bot state, these are the possible states: [:idling, :moving, :attacking, :running_away, :tracking_player]
     :state,
     # The previous position of the bot
     :previous_position,
@@ -18,12 +19,16 @@ defmodule BotManager.BotStateMachineChecker do
     :cap_for_basic_skill,
     # This is the maximum value that the progress_for_ultimate_skill can reach
     :cap_for_ultimate_skill,
-    # The time that the bot is going to take to change its direction in milliseconds
-    :time_to_change_direction,
-    # The last time that the bot changed its direction
-    :last_time_direction_changed,
-    # The time that the bot has been moving in the same direction
-    :current_time_in_direction
+    # The position that the bot is going to move to
+    :position_to_move_to,
+    # The time that the bot is going to take to change its position in milliseconds
+    :time_amount_to_change_position,
+    # The last time that the bot changed its position
+    :last_time_position_changed,
+    # The maximum vision range that the bot can follow a player
+    :max_vision_range_to_follow_player,
+    # The vision range that the bot has to find a player to attack
+    :vision_range_to_attack_player
   ]
 
   def new do
@@ -35,15 +40,18 @@ defmodule BotManager.BotStateMachineChecker do
       cap_for_ultimate_skill: 3,
       previous_position: nil,
       current_position: nil,
-      time_to_change_direction: 1600,
-      last_time_direction_changed: 0,
-      current_time_in_direction: 0
+      position_to_move_to: nil,
+      time_amount_to_change_position: 2000,
+      last_time_position_changed: 0,
+      max_vision_range_to_follow_player: 1500,
+      vision_range_to_attack_player: 1200
     }
   end
 
-  def move_to_next_state(bot_player, bot_state_machine) do
+  def move_to_next_state(bot_player, bot_state_machine, players) do
     cond do
       bot_health_low?(bot_player) -> :running_away
+      bot_can_follow_a_player?(bot_player, bot_state_machine, players) -> :tracking_player
       bot_can_turn_aggresive?(bot_state_machine) -> :attacking
       true -> :moving
     end
@@ -61,10 +69,21 @@ defmodule BotManager.BotStateMachineChecker do
       bot_state_machine.progress_for_ultimate_skill >= bot_state_machine.cap_for_ultimate_skill
   end
 
-  def should_bot_rotate_its_direction?(bot_state_machine) do
+  def should_bot_move_to_another_position?(bot_state_machine) do
     current_time = :os.system_time(:millisecond)
-    time_since_last_direction_change = current_time - bot_state_machine.last_time_direction_changed
+    time_since_last_position_change = current_time - bot_state_machine.last_time_position_changed
 
-    time_since_last_direction_change >= bot_state_machine.time_to_change_direction
+    time_since_last_position_change >= bot_state_machine.time_amount_to_change_position
+  end
+
+  def bot_can_follow_a_player?(bot_player, bot_state_machine, players) do
+    players_nearby_to_follow =
+      Utils.map_directions_to_players(players, bot_player, bot_state_machine.max_vision_range_to_follow_player)
+
+    players_nearby_to_attack =
+      Utils.map_directions_to_players(players, bot_player, bot_state_machine.vision_range_to_attack_player)
+
+    Enum.empty?(players_nearby_to_attack) && not Enum.empty?(players_nearby_to_follow) &&
+      bot_can_turn_aggresive?(bot_state_machine)
   end
 end
