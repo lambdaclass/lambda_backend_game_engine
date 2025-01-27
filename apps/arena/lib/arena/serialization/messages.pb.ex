@@ -9,6 +9,25 @@ defmodule Arena.Serialization.GameMode do
   field(:QUICK_GAME, 3)
 end
 
+defmodule Arena.Serialization.AttackType do
+  @moduledoc false
+
+  use Protobuf, enum: true, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
+
+  field(:MELEE, 0)
+  field(:RANGED, 1)
+end
+
+defmodule Arena.Serialization.SkillType do
+  @moduledoc false
+
+  use Protobuf, enum: true, syntax: :proto3, protoc_gen_elixir_version: "0.13.0"
+
+  field(:BASIC, 0)
+  field(:ULTIMATE, 1)
+  field(:DASH, 2)
+end
+
 defmodule Arena.Serialization.GameStatus do
   @moduledoc false
 
@@ -332,6 +351,14 @@ defmodule Arena.Serialization.ConfigSkill do
   field(:targetting_offset, 8, type: :float, json_name: "targettingOffset")
   field(:mana_cost, 9, type: :uint64, json_name: "manaCost")
   field(:is_combo, 10, type: :bool, json_name: "isCombo")
+
+  field(:attack_type, 11,
+    type: Arena.Serialization.AttackType,
+    json_name: "attackType",
+    enum: true
+  )
+
+  field(:skill_type, 12, type: Arena.Serialization.SkillType, json_name: "skillType", enum: true)
 end
 
 defmodule Arena.Serialization.GameState.PlayersEntry do
